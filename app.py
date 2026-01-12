@@ -8,12 +8,14 @@ import time
 from datetime import datetime, timedelta
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+import uuid
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
 APP_NAME = "Dataflow Backfill Manager"
+BACKFILL_TABLE = "MAKO_DATA_LAKE.PUBLIC.BACKFILL_RUNS"
 
 # =============================================================================
 # STYLING
@@ -66,7 +68,7 @@ def apply_custom_css():
     }
     
     .app-title {
-        color: white;
+        color: #ffffff !important;
         font-size: 1.5rem;
         font-weight: 600;
         margin: 0;
@@ -74,29 +76,10 @@ def apply_custom_css():
     }
     
     .app-subtitle {
-        color: rgba(255,255,255,0.7);
+        color: rgba(255,255,255,0.85) !important;
         font-size: 0.875rem;
         font-weight: 400;
         margin-top: 0.5rem;
-    }
-    
-    /* Cards */
-    .card {
-        background: var(--bg-secondary);
-        border-radius: 8px;
-        padding: 1.5rem;
-        border: 1px solid var(--border-color);
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        margin-bottom: 1rem;
-    }
-    
-    .card-title {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 1rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
     }
     
     /* Metric boxes */
@@ -180,6 +163,12 @@ def apply_custom_css():
         background: var(--error-bg);
         color: #c53030;
         border: 1px solid var(--error-border);
+    }
+    
+    .status-paused {
+        background: var(--warning-bg);
+        color: #c05621;
+        border: 1px solid var(--warning-border);
     }
     
     /* Alert boxes */
@@ -341,29 +330,25 @@ def apply_custom_css():
         background: var(--primary-dark);
     }
     
-    /* Tables */
-    .data-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.875rem;
+    /* Resume card */
+    .resume-card {
+        background: var(--warning-bg);
+        border: 2px solid var(--warning-border);
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
     }
     
-    .data-table th {
-        background: var(--bg-tertiary);
-        padding: 0.75rem 1rem;
-        text-align: left;
+    .resume-card-title {
+        font-size: 1rem;
         font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.05em;
-        border-bottom: 1px solid var(--border-color);
+        color: #744210;
+        margin-bottom: 0.75rem;
     }
     
-    .data-table td {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid var(--border-color);
-        color: var(--text-primary);
+    .resume-card-details {
+        font-size: 0.875rem;
+        color: #975a16;
     }
     
     /* Sidebar styling */
@@ -372,35 +357,62 @@ def apply_custom_css():
         border-right: 1px solid var(--border-color);
     }
     
-    section[data-testid="stSidebar"] .block-container {
-        padding-top: 2rem;
-    }
-    
     /* Hide Streamlit elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display: none;}
-    
-    /* Input styling */
-    .stTextInput > div > div > input {
-        font-family: 'Inter', sans-serif;
-        border-radius: 6px;
-    }
-    
-    .stSelectbox > div > div {
-        border-radius: 6px;
-    }
-    
-    .stDateInput > div > div > input {
-        font-family: 'Inter', sans-serif;
-        border-radius: 6px;
-    }
     
     /* Divider */
     .divider {
         height: 1px;
         background: var(--border-color);
         margin: 1.5rem 0;
+    }
+
+        /* Input styling */
+    .stTextInput > div > div > input {
+        font-family: 'Inter', sans-serif;
+        border-radius: 6px;
+        border: 1px solid #cbd5e0 !important;
+        background-color: #ffffff !important;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #5a67d8 !important;
+        box-shadow: 0 0 0 2px rgba(90, 103, 216, 0.2) !important;
+    }
+    
+    .stSelectbox > div > div {
+        border-radius: 6px;
+        border: 1px solid #cbd5e0 !important;
+        background-color: #ffffff !important;
+    }
+    
+    .stDateInput > div > div > input {
+        font-family: 'Inter', sans-serif;
+        border-radius: 6px;
+        border: 1px solid #cbd5e0 !important;
+        background-color: #ffffff !important;
+    }
+    
+    .stNumberInput > div > div > input {
+        font-family: 'Inter', sans-serif;
+        border-radius: 6px;
+        border: 1px solid #cbd5e0 !important;
+        background-color: #ffffff !important;
+    }
+    
+    /* Sidebar section labels */
+    section[data-testid="stSidebar"] .stMarkdown p strong {
+        color: #2d3748;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    /* Sidebar dividers */
+    section[data-testid="stSidebar"] .divider {
+        margin: 1rem 0;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -584,6 +596,125 @@ def apply_date_filter(ddl: str, from_date: str, to_date: str) -> str:
 
 
 # =============================================================================
+# STATE PERSISTENCE FUNCTIONS
+# =============================================================================
+
+def create_backfill_run(cur, dataflow_id: int, dataflow_name: str, start_date: datetime, 
+                        end_date: datetime, batch_days: int, total_batches: int,
+                        original_ddls: Dict, ready_views: List) -> str:
+    """Create a new backfill run record"""
+    run_id = str(uuid.uuid4())[:8]
+    
+    cur.execute(f"""
+        INSERT INTO {BACKFILL_TABLE} 
+        (run_id, dataflow_id, dataflow_name, start_date, end_date, batch_days, 
+         current_batch, total_batches, status, original_ddls, ready_views, logs)
+        SELECT 
+            %(run_id)s,
+            %(dataflow_id)s,
+            %(dataflow_name)s,
+            %(start_date)s,
+            %(end_date)s,
+            %(batch_days)s,
+            0,
+            %(total_batches)s,
+            'RUNNING',
+            PARSE_JSON(%(original_ddls)s),
+            PARSE_JSON(%(ready_views)s),
+            PARSE_JSON('[]')
+    """, {
+        'run_id': run_id,
+        'dataflow_id': dataflow_id,
+        'dataflow_name': dataflow_name,
+        'start_date': start_date.strftime('%Y-%m-%d'),
+        'end_date': end_date.strftime('%Y-%m-%d'),
+        'batch_days': batch_days,
+        'total_batches': total_batches,
+        'original_ddls': json.dumps(original_ddls),
+        'ready_views': json.dumps(ready_views)
+    })
+    
+    return run_id
+
+def update_backfill_progress(cur, run_id: str, current_batch: int, status: str, logs: List[Dict]):
+    """Update backfill run progress"""
+    cur.execute(f"""
+        UPDATE {BACKFILL_TABLE}
+        SET current_batch = %(current_batch)s,
+            status = %(status)s,
+            logs = PARSE_JSON(%(logs)s),
+            updated_at = CURRENT_TIMESTAMP()
+        WHERE run_id = %(run_id)s
+    """, {
+        'run_id': run_id,
+        'current_batch': current_batch,
+        'status': status,
+        'logs': json.dumps(logs)
+    })
+
+def get_incomplete_runs(cur) -> List[Dict]:
+    """Get all incomplete backfill runs"""
+    cur.execute(f"""
+        SELECT run_id, dataflow_id, dataflow_name, start_date, end_date, batch_days,
+               current_batch, total_batches, status, original_ddls, ready_views, logs,
+               created_at, updated_at
+        FROM {BACKFILL_TABLE}
+        WHERE status IN ('RUNNING', 'PAUSED')
+        ORDER BY created_at DESC
+    """)
+    
+    rows = cur.fetchall()
+    columns = ['run_id', 'dataflow_id', 'dataflow_name', 'start_date', 'end_date', 
+               'batch_days', 'current_batch', 'total_batches', 'status', 
+               'original_ddls', 'ready_views', 'logs', 'created_at', 'updated_at']
+    
+    return [dict(zip(columns, row)) for row in rows]
+
+def get_run_by_id(cur, run_id: str) -> Optional[Dict]:
+    """Get a specific backfill run"""
+    cur.execute(f"""
+        SELECT run_id, dataflow_id, dataflow_name, start_date, end_date, batch_days,
+               current_batch, total_batches, status, original_ddls, ready_views, logs,
+               created_at, updated_at
+        FROM {BACKFILL_TABLE}
+        WHERE run_id = %(run_id)s
+    """, {'run_id': run_id})
+    
+    row = cur.fetchone()
+    if not row:
+        return None
+    
+    columns = ['run_id', 'dataflow_id', 'dataflow_name', 'start_date', 'end_date', 
+               'batch_days', 'current_batch', 'total_batches', 'status', 
+               'original_ddls', 'ready_views', 'logs', 'created_at', 'updated_at']
+    
+    return dict(zip(columns, row))
+
+def revert_views_from_run(cur, run: Dict):
+    """Revert views to original state using stored DDLs"""
+    original_ddls = run.get('original_ddls', {})
+    if isinstance(original_ddls, str):
+        original_ddls = json.loads(original_ddls)
+    
+    for fqn, ddl in original_ddls.items():
+        try:
+            cur.execute(ddl)
+        except Exception as e:
+            st.warning(f"Failed to revert {fqn}: {e}")
+
+def cancel_run(cur, run_id: str):
+    """Cancel a run and revert views"""
+    run = get_run_by_id(cur, run_id)
+    if run:
+        revert_views_from_run(cur, run)
+        cur.execute(f"""
+            UPDATE {BACKFILL_TABLE}
+            SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP()
+            WHERE run_id = %(run_id)s
+        """, {'run_id': run_id})
+
+
+# =============================================================================
 # UI COMPONENTS
 # =============================================================================
 
@@ -649,7 +780,6 @@ def render_dataflow_info(df_info: Dict, update_info: Dict):
 def render_view_status(ready_views: List, missing_views: List, skipped: List):
     st.markdown('<div class="section-title">Input Sources Analysis</div>', unsafe_allow_html=True)
     
-    # Summary metrics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"""
@@ -705,13 +835,16 @@ def render_view_status(ready_views: List, missing_views: List, skipped: List):
                 </div>
                 """, unsafe_allow_html=True)
 
-def render_progress(current_batch: int, total_batches: int, current_dates: Tuple[str, str], status: str, logs: List[Dict]):
+def render_progress(current_batch: int, total_batches: int, current_dates: Tuple[str, str], 
+                    status: str, logs: List[Dict], run_id: str = None):
     percentage = (current_batch / total_batches * 100) if total_batches > 0 else 0
+    
+    run_info = f" (Run ID: {run_id})" if run_id else ""
     
     st.markdown(f"""
     <div class="progress-container">
         <div class="progress-header">
-            <span class="progress-title">Execution Progress</span>
+            <span class="progress-title">Execution Progress{run_info}</span>
             <span class="progress-percentage">{percentage:.0f}%</span>
         </div>
     </div>
@@ -731,7 +864,9 @@ def render_progress(current_batch: int, total_batches: int, current_dates: Tuple
             'SUCCESS': 'status-success',
             'FAILED': 'status-failed',
             'PENDING': 'status-info',
-            'PREPARING': 'status-info'
+            'PREPARING': 'status-info',
+            'PAUSED': 'status-paused',
+            'COMPLETED': 'status-success'
         }.get(status, 'status-info')
         st.markdown(f"""
         <div class="metric-box">
@@ -740,7 +875,6 @@ def render_progress(current_batch: int, total_batches: int, current_dates: Tuple
         </div>
         """, unsafe_allow_html=True)
     
-    # Log display
     if logs:
         st.markdown("<br/>", unsafe_allow_html=True)
         st.markdown('<div class="section-title">Execution Log</div>', unsafe_allow_html=True)
@@ -758,6 +892,24 @@ def render_progress(current_batch: int, total_batches: int, current_dates: Tuple
             '''
         log_html += '</div>'
         st.markdown(log_html, unsafe_allow_html=True)
+
+def render_incomplete_run(run: Dict):
+    """Render an incomplete run card"""
+    progress = (run['current_batch'] / run['total_batches'] * 100) if run['total_batches'] > 0 else 0
+    
+    st.markdown(f"""
+    <div class="resume-card">
+        <div class="resume-card-title">Incomplete Backfill Detected</div>
+        <div class="resume-card-details">
+            <strong>Dataflow:</strong> {run['dataflow_name']}<br/>
+            <strong>Run ID:</strong> {run['run_id']}<br/>
+            <strong>Progress:</strong> {run['current_batch']} / {run['total_batches']} batches ({progress:.0f}%)<br/>
+            <strong>Date Range:</strong> {run['start_date']} to {run['end_date']}<br/>
+            <strong>Status:</strong> {run['status']}<br/>
+            <strong>Last Updated:</strong> {run['updated_at']}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -780,8 +932,10 @@ def add_log(logs: List[Dict], message: str, log_type: str = 'info'):
         'type': log_type
     })
 
-def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: datetime, 
-                 batch_days: int, poll_interval: int, progress_placeholder):
+def run_backfill(run_id: str, df_id: int, ready_views: List, start_date: datetime, 
+                 end_date: datetime, batch_days: int, poll_interval: int, 
+                 start_batch: int, original_ddls: Dict, progress_placeholder):
+    """Run or resume a backfill process"""
     
     batches = calculate_batches(start_date, end_date, batch_days)
     total_batches = len(batches)
@@ -790,20 +944,20 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
     conn = get_snowflake_connection()
     cur = conn.cursor()
     
-    # Store original DDLs
-    original_ddls = {}
-    for fqn, actual_name in ready_views:
-        original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
-    
     try:
-        for batch_idx, (batch_start, batch_end) in enumerate(batches):
+        for batch_idx in range(start_batch, total_batches):
+            batch_start, batch_end = batches[batch_idx]
             start_str = batch_start.strftime('%Y-%m-%d')
             end_str = batch_end.strftime('%Y-%m-%d')
             
             add_log(logs, f"Starting batch {batch_idx + 1}/{total_batches}: {start_str} to {end_str}", 'info')
             
+            # Update state to RUNNING
+            update_backfill_progress(cur, run_id, batch_idx, 'RUNNING', logs)
+            conn.commit()
+            
             with progress_placeholder.container():
-                render_progress(batch_idx, total_batches, (start_str, end_str), "PREPARING", logs)
+                render_progress(batch_idx, total_batches, (start_str, end_str), "PREPARING", logs, run_id)
             
             # Apply date filters
             add_log(logs, f"Applying date filters to {len(ready_views)} view(s)", 'info')
@@ -817,6 +971,8 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
             
             if status_code != 200:
                 add_log(logs, f"Failed to trigger dataflow: {response}", 'error')
+                update_backfill_progress(cur, run_id, batch_idx, 'FAILED', logs)
+                conn.commit()
                 raise Exception(f"Trigger failed: {response}")
             
             execution_id = response.get('id')
@@ -827,43 +983,76 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
                 status, _, _ = get_execution_status(df_id, execution_id)
                 
                 with progress_placeholder.container():
-                    render_progress(batch_idx, total_batches, (start_str, end_str), status, logs)
+                    render_progress(batch_idx, total_batches, (start_str, end_str), status, logs, run_id)
                 
                 if status == 'SUCCESS':
                     add_log(logs, f"Batch {batch_idx + 1} completed successfully", 'success')
+                    
+                    # Update progress after successful batch
+                    update_backfill_progress(cur, run_id, batch_idx + 1, 'RUNNING', logs)
+                    conn.commit()
                     break
+                    
                 elif status in ['FAILED', 'KILLED', 'CANCELLED']:
                     add_log(logs, f"Batch {batch_idx + 1} failed: {status}", 'error')
+                    update_backfill_progress(cur, run_id, batch_idx, 'FAILED', logs)
+                    conn.commit()
                     raise Exception(f"Dataflow execution failed: {status}")
                 
                 time.sleep(poll_interval)
             
+            # Check if stop requested
             if st.session_state.get('stop_backfill', False):
-                add_log(logs, "Backfill stopped by user", 'warning')
-                break
+                add_log(logs, "Backfill paused by user", 'warning')
+                update_backfill_progress(cur, run_id, batch_idx + 1, 'PAUSED', logs)
+                conn.commit()
+                
+                # Revert views before pausing
+                add_log(logs, "Reverting views to original state", 'info')
+                for fqn in original_ddls:
+                    cur.execute(original_ddls[fqn])
+                add_log(logs, "Views reverted - safe to close", 'success')
+                
+                with progress_placeholder.container():
+                    render_progress(batch_idx + 1, total_batches, ("", ""), "PAUSED", logs, run_id)
+                
+                return False, logs
         
+        # All batches completed
         add_log(logs, "Backfill completed successfully", 'success')
         
+        # Revert views
+        add_log(logs, "Reverting views to original state", 'info')
+        for fqn in original_ddls:
+            cur.execute(original_ddls[fqn])
+        add_log(logs, "View reversion complete", 'success')
+        
+        update_backfill_progress(cur, run_id, total_batches, 'COMPLETED', logs)
+        conn.commit()
+        
         with progress_placeholder.container():
-            render_progress(total_batches, total_batches, ("", ""), "SUCCESS", logs)
+            render_progress(total_batches, total_batches, ("", ""), "COMPLETED", logs, run_id)
         
         return True, logs
         
     except Exception as e:
         add_log(logs, f"Error: {str(e)}", 'error')
-        with progress_placeholder.container():
-            render_progress(batch_idx if 'batch_idx' in locals() else 0, total_batches, ("", ""), "FAILED", logs)
-        return False, logs
         
-    finally:
-        add_log(logs, "Reverting views to original state", 'info')
+        # Revert views on error
+        add_log(logs, "Reverting views due to error", 'warning')
         for fqn in original_ddls:
             try:
                 cur.execute(original_ddls[fqn])
-            except Exception as e:
-                add_log(logs, f"Failed to revert {fqn}: {e}", 'warning')
-        add_log(logs, "View reversion complete", 'success')
-        cur.close()
+            except:
+                pass
+        
+        update_backfill_progress(cur, run_id, batch_idx if 'batch_idx' in locals() else 0, 'FAILED', logs)
+        conn.commit()
+        
+        with progress_placeholder.container():
+            render_progress(batch_idx if 'batch_idx' in locals() else 0, total_batches, ("", ""), "FAILED", logs, run_id)
+        
+        return False, logs
 
 
 # =============================================================================
@@ -886,14 +1075,105 @@ def main():
         st.session_state.backfill_running = False
     if 'stop_backfill' not in st.session_state:
         st.session_state.stop_backfill = False
+    if 'active_run_id' not in st.session_state:
+        st.session_state.active_run_id = None
+    
+    conn = get_snowflake_connection()
+    cur = conn.cursor()
     
     # ==========================================================================
-    # SIDEBAR
+    # CHECK FOR INCOMPLETE RUNS
+    # ==========================================================================
+    
+    incomplete_runs = get_incomplete_runs(cur)
+    
+    if incomplete_runs and not st.session_state.backfill_running:
+        st.markdown('<div class="section-title">Incomplete Runs</div>', unsafe_allow_html=True)
+        
+        for run in incomplete_runs:
+            render_incomplete_run(run)
+            
+            col1, col2, col3 = st.columns([2, 2, 6])
+            with col1:
+                if st.button(f"Resume", key=f"resume_{run['run_id']}", type="primary", use_container_width=True):
+                    st.session_state.active_run_id = run['run_id']
+                    st.session_state.backfill_running = True
+                    st.session_state.stop_backfill = False
+                    st.rerun()
+            with col2:
+                if st.button(f"Cancel", key=f"cancel_{run['run_id']}", use_container_width=True):
+                    cancel_run(cur, run['run_id'])
+                    conn.commit()
+                    st.success(f"Run {run['run_id']} cancelled and views reverted")
+                    st.rerun()
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    
+    # ==========================================================================
+    # RESUME ACTIVE RUN
+    # ==========================================================================
+    
+    if st.session_state.backfill_running and st.session_state.active_run_id:
+        run = get_run_by_id(cur, st.session_state.active_run_id)
+        
+        if run and run['status'] in ('RUNNING', 'PAUSED'):
+            st.markdown('<div class="section-title">Resuming Backfill</div>', unsafe_allow_html=True)
+            
+            # Parse stored data
+            original_ddls = run['original_ddls']
+            if isinstance(original_ddls, str):
+                original_ddls = json.loads(original_ddls)
+            
+            ready_views_data = run['ready_views']
+            if isinstance(ready_views_data, str):
+                ready_views_data = json.loads(ready_views_data)
+            ready_views = [(v['fqn'], v['actual_name']) for v in ready_views_data]
+            
+            # Stop button
+            if st.button("Pause Backfill", use_container_width=False):
+                st.session_state.stop_backfill = True
+            
+            progress_placeholder = st.empty()
+            
+            start_date = datetime.strptime(str(run['start_date']), '%Y-%m-%d')
+            end_date = datetime.strptime(str(run['end_date']), '%Y-%m-%d')
+            
+            success, logs = run_backfill(
+                run_id=run['run_id'],
+                df_id=run['dataflow_id'],
+                ready_views=ready_views,
+                start_date=start_date,
+                end_date=end_date,
+                batch_days=run['batch_days'],
+                poll_interval=10,
+                start_batch=run['current_batch'],
+                original_ddls=original_ddls,
+                progress_placeholder=progress_placeholder
+            )
+            
+            st.session_state.backfill_running = False
+            st.session_state.active_run_id = None
+            
+            if success:
+                st.markdown("""
+                <div class="alert alert-success">
+                    <span class="alert-title">Backfill Complete</span><br/>
+                    All batches have been processed successfully.
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.session_state.backfill_running = False
+            st.session_state.active_run_id = None
+            st.rerun()
+        
+        return
+    
+    # ==========================================================================
+    # SIDEBAR - NEW BACKFILL CONFIGURATION
     # ==========================================================================
     with st.sidebar:
         st.markdown("### Configuration")
         
-        # Load dataflows
         try:
             dataflows = list_dataflows()
             dataflow_options = {f"{df['id']} | {df['name']}": df['id'] for df in dataflows}
@@ -901,7 +1181,6 @@ def main():
             st.error(f"Failed to load dataflows: {e}")
             return
         
-        # Dataflow selection
         st.markdown("**Select Dataflow**")
         search_term = st.text_input("Search", "", placeholder="Filter by name or ID")
         filtered_options = [opt for opt in dataflow_options.keys() if search_term.lower() in opt.lower()]
@@ -915,7 +1194,6 @@ def main():
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        # Date range
         st.markdown("**Date Range**")
         col1, col2 = st.columns(2)
         with col1:
@@ -925,12 +1203,10 @@ def main():
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        # Batch settings
         st.markdown("**Batch Settings**")
         batch_days = st.number_input("Batch size (days)", min_value=1, max_value=30, value=3)
         poll_interval = st.number_input("Poll interval (seconds)", min_value=5, max_value=120, value=10)
         
-        # Batch calculation
         batches = calculate_batches(
             datetime.combine(start_date, datetime.min.time()),
             datetime.combine(end_date, datetime.min.time()),
@@ -945,7 +1221,7 @@ def main():
         """, unsafe_allow_html=True)
     
     # ==========================================================================
-    # MAIN CONTENT
+    # MAIN CONTENT - NEW BACKFILL
     # ==========================================================================
     
     try:
@@ -960,7 +1236,6 @@ def main():
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
-    # Analyze views
     snowflake_objects = [name for name in input_names if is_fully_qualified(name)]
     
     if not snowflake_objects:
@@ -971,9 +1246,6 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         return
-    
-    conn = get_snowflake_connection()
-    cur = conn.cursor()
     
     ready_views = []
     missing_views = []
@@ -995,8 +1267,6 @@ def main():
                 skipped.append((fqn, obj_type))
         except Exception as e:
             skipped.append((fqn, f"Error: {e}"))
-    
-    cur.close()
     
     render_view_status(ready_views, missing_views, skipped)
     
@@ -1037,7 +1307,7 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
     
     with col2:
         stop_btn = st.button(
-            "Stop", 
+            "Pause", 
             use_container_width=True,
             disabled=not st.session_state.backfill_running
         )
@@ -1051,23 +1321,58 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
         st.session_state.backfill_running = True
         st.session_state.stop_backfill = False
         
+        # Collect original DDLs
+        original_ddls = {}
+        for fqn, actual_name in ready_views:
+            original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
+        
+        # Prepare ready_views for storage
+        ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
+        
+        # Create run record
+        run_id = create_backfill_run(
+            cur=cur,
+            dataflow_id=selected_df_id,
+            dataflow_name=dataflow.get('name'),
+            start_date=datetime.combine(start_date, datetime.min.time()),
+            end_date=datetime.combine(end_date, datetime.min.time()),
+            batch_days=batch_days,
+            total_batches=len(batches),
+            original_ddls=original_ddls,
+            ready_views=ready_views_data
+        )
+        conn.commit()
+        
+        st.session_state.active_run_id = run_id
+        
         success, logs = run_backfill(
+            run_id=run_id,
             df_id=selected_df_id,
             ready_views=ready_views,
             start_date=datetime.combine(start_date, datetime.min.time()),
             end_date=datetime.combine(end_date, datetime.min.time()),
             batch_days=batch_days,
             poll_interval=poll_interval,
+            start_batch=0,
+            original_ddls=original_ddls,
             progress_placeholder=progress_placeholder
         )
         
         st.session_state.backfill_running = False
+        st.session_state.active_run_id = None
         
         if success:
             st.markdown("""
             <div class="alert alert-success">
                 <span class="alert-title">Backfill Complete</span><br/>
                 All batches have been processed successfully.
+            </div>
+            """, unsafe_allow_html=True)
+        elif st.session_state.stop_backfill:
+            st.markdown("""
+            <div class="alert alert-warning">
+                <span class="alert-title">Backfill Paused</span><br/>
+                The backfill has been paused. You can resume it later from the incomplete runs section.
             </div>
             """, unsafe_allow_html=True)
         else:
