@@ -1377,12 +1377,21 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
                         time.sleep(1)
                         st.rerun()
     
-    # ==========================================================================
-    # AUTO-REFRESH
-    # ==========================================================================
+# ==========================================================================
+# AUTO-REFRESH
+# ==========================================================================
+
+if active_runs:
+    waiting_runs = [r for r in active_runs if r['status'] == 'WAITING']
     
-    if active_runs:
-        st_autorefresh(interval=AUTO_REFRESH_SECONDS * 1000, key="datarefresh")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        if st.button("Refresh", use_container_width=True):
+            st.rerun()
+    
+    if waiting_runs:
+        # Only auto-refresh when waiting for Domo execution
+        st_autorefresh(interval=10 * 1000, key="datarefresh")
 
 
 if __name__ == "__main__":
