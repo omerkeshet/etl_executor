@@ -875,21 +875,16 @@ def render_progress(current_batch: int, total_batches: int, current_dates: Tuple
         </div>
         """, unsafe_allow_html=True)
     
-    if logs:
-        st.markdown("<br/>", unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Execution Log</div>', unsafe_allow_html=True)
-        
+if logs:
+    st.markdown("<br/>", unsafe_allow_html=True)
+    
+    with st.expander("Execution Log", expanded=True):
         log_html = '<div class="log-container">'
         for log in logs[-25:]:
             log_class = log.get('type', 'info')
             timestamp = log.get('timestamp', '')
             message = log.get('message', '')
-            log_html += f'''
-            <div class="log-entry {log_class}">
-                <span class="log-timestamp">{timestamp}</span>
-                <span class="log-message">{message}</span>
-            </div>
-            '''
+            log_html += f'''<div class="log-entry {log_class}"><span class="log-timestamp">{timestamp}</span><span class="log-message">{message}</span></div>'''
         log_html += '</div>'
         st.markdown(log_html, unsafe_allow_html=True)
 
