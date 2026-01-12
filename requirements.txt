@@ -2,3 +2,4 @@ streamlit
 requests
 snowflake-connector-python
 cryptography
+streamlit-autorefresh
