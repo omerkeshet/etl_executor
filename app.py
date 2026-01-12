@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 import uuid
+from streamlit_autorefresh import st_autorefresh
 
 # =============================================================================
 # CONFIGURATION
@@ -616,7 +617,6 @@ def apply_date_filter(ddl: str, from_date: str, to_date: str) -> str:
     return '\n'.join(new_lines)
 
 def revert_view(cur, fqn: str, original_ddl: str):
-    """Revert a single view to its original state"""
     try:
         cur.execute(original_ddl)
         return True
@@ -631,7 +631,6 @@ def revert_view(cur, fqn: str, original_ddl: str):
 def create_backfill_run(cur, dataflow_id: int, dataflow_name: str, start_date: datetime, 
                         end_date: datetime, batch_days: int, total_batches: int,
                         original_ddls: Dict, ready_views: List, poll_interval: int) -> str:
-    """Create a new backfill run record"""
     run_id = str(uuid.uuid4())[:8]
     
     cur.execute(f"""
@@ -671,7 +670,6 @@ def create_backfill_run(cur, dataflow_id: int, dataflow_name: str, start_date: d
 
 def update_run_status(cur, run_id: str, status: str, current_batch: int = None, 
                       execution_id: int = None, logs: List[Dict] = None):
-    """Update run status and optionally other fields"""
     updates = ["status = %(status)s", "updated_at = CURRENT_TIMESTAMP()"]
     params = {'run_id': run_id, 'status': status}
     
@@ -682,6 +680,8 @@ def update_run_status(cur, run_id: str, status: str, current_batch: int = None,
     if execution_id is not None:
         updates.append("current_execution_id = %(execution_id)s")
         params['execution_id'] = execution_id
+    elif execution_id == 0:
+        updates.append("current_execution_id = NULL")
     
     if logs is not None:
         updates.append("logs = PARSE_JSON(%(logs)s)")
@@ -694,7 +694,6 @@ def update_run_status(cur, run_id: str, status: str, current_batch: int = None,
     """, params)
 
 def get_active_runs(cur) -> List[Dict]:
-    """Get all active (PENDING, RUNNING, WAITING) backfill runs"""
     cur.execute(f"""
         SELECT run_id, dataflow_id, dataflow_name, start_date, end_date, batch_days,
                current_batch, total_batches, status, original_ddls, ready_views, logs,
@@ -713,7 +712,6 @@ def get_active_runs(cur) -> List[Dict]:
     return [dict(zip(columns, row)) for row in rows]
 
 def get_all_runs(cur, limit: int = 20) -> List[Dict]:
-    """Get all backfill runs for display"""
     cur.execute(f"""
         SELECT run_id, dataflow_id, dataflow_name, start_date, end_date, batch_days,
                current_batch, total_batches, status, original_ddls, ready_views, logs,
@@ -732,7 +730,6 @@ def get_all_runs(cur, limit: int = 20) -> List[Dict]:
     return [dict(zip(columns, row)) for row in rows]
 
 def get_run_by_id(cur, run_id: str) -> Optional[Dict]:
-    """Get a specific backfill run"""
     cur.execute(f"""
         SELECT run_id, dataflow_id, dataflow_name, start_date, end_date, batch_days,
                current_batch, total_batches, status, original_ddls, ready_views, logs,
@@ -758,18 +755,15 @@ def get_run_by_id(cur, run_id: str) -> Optional[Dict]:
 # =============================================================================
 
 def calculate_batch_dates(start_date: datetime, end_date: datetime, batch_days: int, batch_index: int) -> Tuple[datetime, datetime]:
-    """Calculate the start and end date for a specific batch"""
     batch_start = start_date + timedelta(days=batch_index * batch_days)
     batch_end = min(batch_start + timedelta(days=batch_days - 1), end_date)
     return batch_start, batch_end
 
 def calculate_total_batches(start_date: datetime, end_date: datetime, batch_days: int) -> int:
-    """Calculate total number of batches"""
     total_days = (end_date - start_date).days + 1
     return (total_days + batch_days - 1) // batch_days
 
 def add_log(logs: List[Dict], message: str, log_type: str = 'info') -> List[Dict]:
-    """Add a log entry and return updated logs"""
     logs.append({
         'timestamp': datetime.now().strftime('%H:%M:%S'),
         'message': message,
@@ -778,16 +772,11 @@ def add_log(logs: List[Dict], message: str, log_type: str = 'info') -> List[Dict
     return logs
 
 def parse_json_field(value) -> Any:
-    """Parse a JSON field that might be a string or already parsed"""
     if isinstance(value, str):
         return json.loads(value)
     return value
 
 def process_single_run(cur, run: Dict) -> bool:
-    """
-    Process a single run - execute one step of the state machine.
-    Returns True if something was done, False if waiting.
-    """
     run_id = run['run_id']
     status = run['status']
     dataflow_id = run['dataflow_id']
@@ -802,11 +791,8 @@ def process_single_run(cur, run: Dict) -> bool:
     end_date = datetime.strptime(str(run['end_date']), '%Y-%m-%d')
     batch_days = run['batch_days']
     
-    # State machine
     if status == 'PENDING':
-        # Start the first batch
         if current_batch >= total_batches:
-            # Already done
             logs = add_log(logs, "Backfill completed", 'success')
             update_run_status(cur, run_id, 'COMPLETED', logs=logs)
             return True
@@ -816,21 +802,18 @@ def process_single_run(cur, run: Dict) -> bool:
         end_str = batch_end.strftime('%Y-%m-%d')
         
         logs = add_log(logs, f"Starting batch {current_batch + 1}/{total_batches}: {start_str} to {end_str}")
-        
-        # Apply date filters to views
         logs = add_log(logs, f"Applying date filters to {len(ready_views)} view(s)")
+        
         for view_info in ready_views:
             fqn = view_info['fqn']
             modified_ddl = apply_date_filter(original_ddls[fqn], start_str, end_str)
             cur.execute(modified_ddl)
         
-        # Trigger dataflow
         logs = add_log(logs, "Triggering dataflow execution")
         status_code, response = trigger_dataflow(dataflow_id)
         
         if status_code != 200:
             logs = add_log(logs, f"Failed to trigger dataflow: {response}", 'error')
-            # Revert views
             for view_info in ready_views:
                 revert_view(cur, view_info['fqn'], original_ddls[view_info['fqn']])
             update_run_status(cur, run_id, 'FAILED', logs=logs)
@@ -839,12 +822,10 @@ def process_single_run(cur, run: Dict) -> bool:
         execution_id = response.get('id')
         logs = add_log(logs, f"Execution started (ID: {execution_id})", 'success')
         
-        # Move to WAITING state
         update_run_status(cur, run_id, 'WAITING', execution_id=execution_id, logs=logs)
         return True
     
     elif status == 'WAITING':
-        # Check if current execution is done
         execution_id = run['current_execution_id']
         
         if not execution_id:
@@ -857,38 +838,31 @@ def process_single_run(cur, run: Dict) -> bool:
         if exec_status == 'SUCCESS':
             logs = add_log(logs, f"Batch {current_batch + 1} completed successfully", 'success')
             
-            # Move to next batch
             next_batch = current_batch + 1
             
             if next_batch >= total_batches:
-                # All done - revert views
                 logs = add_log(logs, "All batches completed, reverting views")
                 for view_info in ready_views:
                     revert_view(cur, view_info['fqn'], original_ddls[view_info['fqn']])
                 logs = add_log(logs, "Backfill completed successfully", 'success')
                 update_run_status(cur, run_id, 'COMPLETED', current_batch=next_batch, logs=logs)
             else:
-                # More batches to go - move to RUNNING to trigger next
-                update_run_status(cur, run_id, 'RUNNING', current_batch=next_batch, execution_id=None, logs=logs)
+                update_run_status(cur, run_id, 'RUNNING', current_batch=next_batch, execution_id=0, logs=logs)
             
             return True
         
         elif exec_status in ['FAILED', 'KILLED', 'CANCELLED']:
             logs = add_log(logs, f"Batch {current_batch + 1} failed: {exec_status}", 'error')
-            # Revert views
             for view_info in ready_views:
                 revert_view(cur, view_info['fqn'], original_ddls[view_info['fqn']])
             update_run_status(cur, run_id, 'FAILED', logs=logs)
             return True
         
         else:
-            # Still running, do nothing
             return False
     
     elif status == 'RUNNING':
-        # Start the next batch
         if current_batch >= total_batches:
-            # Done
             logs = add_log(logs, "Backfill completed", 'success')
             for view_info in ready_views:
                 revert_view(cur, view_info['fqn'], original_ddls[view_info['fqn']])
@@ -900,15 +874,13 @@ def process_single_run(cur, run: Dict) -> bool:
         end_str = batch_end.strftime('%Y-%m-%d')
         
         logs = add_log(logs, f"Starting batch {current_batch + 1}/{total_batches}: {start_str} to {end_str}")
-        
-        # Apply date filters
         logs = add_log(logs, f"Applying date filters to {len(ready_views)} view(s)")
+        
         for view_info in ready_views:
             fqn = view_info['fqn']
             modified_ddl = apply_date_filter(original_ddls[fqn], start_str, end_str)
             cur.execute(modified_ddl)
         
-        # Trigger dataflow
         logs = add_log(logs, "Triggering dataflow execution")
         status_code, response = trigger_dataflow(dataflow_id)
         
@@ -928,7 +900,6 @@ def process_single_run(cur, run: Dict) -> bool:
     return False
 
 def process_all_active_runs(cur) -> int:
-    """Process all active runs, return count of runs that did something"""
     active_runs = get_active_runs(cur)
     processed = 0
     
@@ -937,11 +908,9 @@ def process_all_active_runs(cur) -> int:
             if process_single_run(cur, run):
                 processed += 1
         except Exception as e:
-            # Log error and mark as failed
             logs = parse_json_field(run['logs']) or []
             logs = add_log(logs, f"Error processing run: {str(e)}", 'error')
             
-            # Try to revert views
             try:
                 original_ddls = parse_json_field(run['original_ddls'])
                 ready_views = parse_json_field(run['ready_views'])
@@ -969,7 +938,6 @@ def render_header():
     """, unsafe_allow_html=True)
 
 def render_run_card(run: Dict, show_actions: bool = True):
-    """Render a single run as a card"""
     status = run['status']
     progress = (run['current_batch'] / run['total_batches'] * 100) if run['total_batches'] > 0 else 0
     
@@ -1013,10 +981,8 @@ def render_run_card(run: Dict, show_actions: bool = True):
     </div>
     """, unsafe_allow_html=True)
     
-    # Progress bar
     st.progress(progress / 100)
     
-    # Actions
     if show_actions:
         col1, col2, col3 = st.columns([1, 1, 4])
         
@@ -1033,7 +999,6 @@ def render_run_card(run: Dict, show_actions: bool = True):
                 if st.button("Cancel", key=f"cancel_{run['run_id']}", use_container_width=True):
                     return ('cancel', run['run_id'])
         
-        # Logs expander
         logs = parse_json_field(run['logs']) or []
         if logs:
             with st.expander("Execution Log", expanded=False):
@@ -1143,7 +1108,7 @@ def main():
         page_title=APP_NAME,
         page_icon="◇",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="collapsed"
     )
     
     apply_custom_css()
@@ -1152,7 +1117,7 @@ def main():
     conn = get_snowflake_connection()
     cur = conn.cursor()
     
-    # Process any active runs (this is the "background" work)
+    # Process any active runs
     process_all_active_runs(cur)
     conn.commit()
     
@@ -1185,7 +1150,6 @@ def main():
                         logs = parse_json_field(run_data['logs']) or []
                         logs = add_log(logs, "Backfill paused by user", 'warning')
                         
-                        # Revert views
                         original_ddls = parse_json_field(run_data['original_ddls'])
                         ready_views = parse_json_field(run_data['ready_views'])
                         for view_info in ready_views:
@@ -1206,7 +1170,6 @@ def main():
                         logs = parse_json_field(run_data['logs']) or []
                         logs = add_log(logs, "Backfill cancelled by user", 'warning')
                         
-                        # Revert views
                         original_ddls = parse_json_field(run_data['original_ddls'])
                         ready_views = parse_json_field(run_data['ready_views'])
                         for view_info in ready_views:
@@ -1218,16 +1181,12 @@ def main():
                 
                 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             
-            # Auto-refresh for active runs
             st.markdown(f"""
             <div class="alert alert-info">
                 <span class="alert-title">Auto-Refresh Active</span><br/>
-                This page will automatically refresh every {AUTO_REFRESH_SECONDS} seconds to update progress.
+                Progress updates every {AUTO_REFRESH_SECONDS} seconds. Switch to "New Backfill" tab to start additional backfills.
             </div>
             """, unsafe_allow_html=True)
-            
-            time.sleep(AUTO_REFRESH_SECONDS)
-            st.rerun()
         
         else:
             st.markdown("""
@@ -1251,13 +1210,11 @@ def main():
     # ==========================================================================
     
     with tab2:
-        # Sidebar content (moved here for tab context)
         col_config, col_preview = st.columns([1, 2])
         
         with col_config:
             st.markdown('<div class="section-title">Configuration</div>', unsafe_allow_html=True)
             
-            # Load dataflows
             try:
                 dataflows = list_dataflows()
                 dataflow_options = {f"{df['id']} | {df['name']}": df['id'] for df in dataflows}
@@ -1265,7 +1222,6 @@ def main():
                 st.error(f"Failed to load dataflows: {e}")
                 return
             
-            # Dataflow selection
             st.markdown("**Select Dataflow**")
             search_term = st.text_input("Search", "", placeholder="Filter by name or ID", key="df_search")
             filtered_options = [opt for opt in dataflow_options.keys() if search_term.lower() in opt.lower()]
@@ -1279,7 +1235,6 @@ def main():
             
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             
-            # Date range
             st.markdown("**Date Range**")
             date_col1, date_col2 = st.columns(2)
             with date_col1:
@@ -1289,12 +1244,10 @@ def main():
             
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             
-            # Batch settings
             st.markdown("**Batch Settings**")
             batch_days = st.number_input("Batch size (days)", min_value=1, max_value=30, value=3, key="batch_days")
             poll_interval = st.number_input("Poll interval (seconds)", min_value=5, max_value=120, value=10, key="poll_interval")
             
-            # Calculate batches
             total_batches = calculate_total_batches(
                 datetime.combine(start_date, datetime.min.time()),
                 datetime.combine(end_date, datetime.min.time()),
@@ -1311,7 +1264,6 @@ def main():
         with col_preview:
             st.markdown('<div class="section-title">Dataflow Preview</div>', unsafe_allow_html=True)
             
-            # Get dataflow info
             try:
                 dataflow = get_dataflow(selected_df_id)
                 update_info = extract_update_method(dataflow)
@@ -1324,7 +1276,6 @@ def main():
             
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             
-            # Analyze views
             snowflake_objects = [name for name in input_names if is_fully_qualified(name)]
             
             if not snowflake_objects:
@@ -1399,19 +1350,15 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
                         """, language="sql")
                 
                 else:
-                    # Start button
                     st.markdown('<div class="section-title">Start Backfill</div>', unsafe_allow_html=True)
                     
                     if st.button("Start Backfill", type="primary", use_container_width=True):
-                        # Collect original DDLs
                         original_ddls = {}
                         for fqn, actual_name in ready_views:
                             original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
                         
-                        # Prepare ready_views for storage
                         ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
                         
-                        # Create run record
                         run_id = create_backfill_run(
                             cur=cur,
                             dataflow_id=selected_df_id,
@@ -1429,6 +1376,13 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
                         st.success(f"Backfill started with Run ID: {run_id}")
                         time.sleep(1)
                         st.rerun()
+    
+    # ==========================================================================
+    # AUTO-REFRESH
+    # ==========================================================================
+    
+    if active_runs:
+        st_autorefresh(interval=AUTO_REFRESH_SECONDS * 1000, key="datarefresh")
 
 
 if __name__ == "__main__":
