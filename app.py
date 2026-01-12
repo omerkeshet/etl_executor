@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives import serialization
 # CONFIGURATION
 # =============================================================================
 
-APP_NAME = "Domo Dataflow Backfill Tool"
+APP_NAME = "Dataflow Backfill Manager"
 
 # =============================================================================
 # STYLING
@@ -22,51 +22,60 @@ APP_NAME = "Domo Dataflow Backfill Tool"
 def apply_custom_css():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
     
     :root {
-        --keshet-blue: #6b7fa3;
-        --keshet-purple: #9b8ec4;
-        --keshet-pink: #c9a9bc;
-        --keshet-orange: #d4a574;
-        --keshet-yellow: #d4c874;
-        --keshet-green: #7eb89a;
-        --keshet-cyan: #7eb8c4;
-        --bg-primary: #f8f9fb;
+        --primary: #4a5568;
+        --primary-dark: #2d3748;
+        --accent: #5a67d8;
+        --accent-light: #7f9cf5;
+        --success: #48bb78;
+        --success-bg: #f0fff4;
+        --success-border: #9ae6b4;
+        --warning: #ed8936;
+        --warning-bg: #fffaf0;
+        --warning-border: #fbd38d;
+        --error: #e53e3e;
+        --error-bg: #fff5f5;
+        --error-border: #feb2b2;
+        --info: #4299e1;
+        --info-bg: #ebf8ff;
+        --info-border: #90cdf4;
+        --bg-primary: #f7fafc;
         --bg-secondary: #ffffff;
-        --text-primary: #3d4a5c;
-        --text-secondary: #8895a7;
-        --border-color: #e8ecf1;
-        --success: #7eb89a;
-        --warning: #d4b574;
-        --error: #c98a8a;
+        --bg-tertiary: #edf2f7;
+        --text-primary: #1a202c;
+        --text-secondary: #718096;
+        --text-muted: #a0aec0;
+        --border-color: #e2e8f0;
+        --border-dark: #cbd5e0;
     }
     
     .stApp {
-        background: #f5f7fa;
-        font-family: 'Plus Jakarta Sans', sans-serif;
+        background: var(--bg-primary);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
     /* Header */
     .app-header {
-        background: linear-gradient(135deg, #8b9dc3 0%, #a89bc4 50%, #c4a9b8 100%);
+        background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
         padding: 2rem 2.5rem;
-        border-radius: 12px;
+        border-radius: 8px;
         margin-bottom: 2rem;
-        box-shadow: 0 4px 20px rgba(139, 157, 195, 0.15);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
     
     .app-title {
         color: white;
-        font-size: 1.75rem;
+        font-size: 1.5rem;
         font-weight: 600;
         margin: 0;
-        letter-spacing: -0.5px;
+        letter-spacing: -0.025em;
     }
     
     .app-subtitle {
-        color: rgba(255,255,255,0.8);
-        font-size: 0.95rem;
+        color: rgba(255,255,255,0.7);
+        font-size: 0.875rem;
         font-weight: 400;
         margin-top: 0.5rem;
     }
@@ -74,133 +83,146 @@ def apply_custom_css():
     /* Cards */
     .card {
         background: var(--bg-secondary);
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 1.5rem;
         border: 1px solid var(--border-color);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         margin-bottom: 1rem;
     }
     
-    /* Stats */
-    .stat-box {
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    /* Metric boxes */
+    .metric-box {
         background: var(--bg-secondary);
-        border-radius: 8px;
+        border-radius: 6px;
         padding: 1rem 1.25rem;
         border: 1px solid var(--border-color);
         text-align: center;
     }
     
-    .stat-value {
-        font-size: 1.4rem;
+    .metric-value {
+        font-size: 1.125rem;
         font-weight: 600;
-        color: #6b7fa3;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
     }
     
-    .stat-label {
+    .metric-label {
         font-size: 0.75rem;
         color: var(--text-secondary);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.05em;
     }
     
-    /* Status badges */
+    /* Status indicators */
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+    
     .status-ready {
-        background: #e8f5e9;
-        color: #2e7d32;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: inline-block;
+        background: var(--success-bg);
+        color: #276749;
+        border: 1px solid var(--success-border);
     }
     
-    .status-missing {
-        background: #fff3e0;
-        color: #ef6c00;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: inline-block;
+    .status-warning {
+        background: var(--warning-bg);
+        color: #c05621;
+        border: 1px solid var(--warning-border);
     }
     
-    .status-skipped {
-        background: #f5f5f5;
-        color: #757575;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: inline-block;
+    .status-error {
+        background: var(--error-bg);
+        color: #c53030;
+        border: 1px solid var(--error-border);
+    }
+    
+    .status-info {
+        background: var(--info-bg);
+        color: #2b6cb0;
+        border: 1px solid var(--info-border);
+    }
+    
+    .status-neutral {
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
     }
     
     .status-running {
-        background: #e3f2fd;
-        color: #1565c0;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: inline-block;
+        background: var(--info-bg);
+        color: #2b6cb0;
+        border: 1px solid var(--info-border);
     }
     
     .status-success {
-        background: #e8f5e9;
-        color: #2e7d32;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: inline-block;
+        background: var(--success-bg);
+        color: #276749;
+        border: 1px solid var(--success-border);
     }
     
     .status-failed {
-        background: #ffebee;
-        color: #c62828;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        display: inline-block;
+        background: var(--error-bg);
+        color: #c53030;
+        border: 1px solid var(--error-border);
     }
     
-    /* Info boxes */
-    .info-box {
-        background: #f0f5ff;
-        border: 1px solid #c8d8f0;
-        border-radius: 8px;
+    /* Alert boxes */
+    .alert {
+        border-radius: 6px;
         padding: 1rem;
-        margin: 0.5rem 0;
+        margin: 0.75rem 0;
+        font-size: 0.875rem;
     }
     
-    .warning-box {
-        background: #fff8e1;
-        border: 1px solid #ffe082;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
+    .alert-info {
+        background: var(--info-bg);
+        border: 1px solid var(--info-border);
+        color: #2c5282;
     }
     
-    .success-box {
-        background: #e8f5e9;
-        border: 1px solid #a5d6a7;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
+    .alert-warning {
+        background: var(--warning-bg);
+        border: 1px solid var(--warning-border);
+        color: #744210;
     }
     
-    .error-box {
-        background: #ffebee;
-        border: 1px solid #ef9a9a;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
+    .alert-success {
+        background: var(--success-bg);
+        border: 1px solid var(--success-border);
+        color: #22543d;
+    }
+    
+    .alert-error {
+        background: var(--error-bg);
+        border: 1px solid var(--error-border);
+        color: #742a2a;
+    }
+    
+    .alert-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
     }
     
     /* Progress section */
     .progress-container {
         background: var(--bg-secondary);
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 1.5rem;
         border: 1px solid var(--border-color);
         margin-top: 1rem;
@@ -214,56 +236,20 @@ def apply_custom_css():
     }
     
     .progress-title {
-        font-size: 1rem;
+        font-size: 0.875rem;
         font-weight: 600;
         color: var(--text-primary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
     
     .progress-percentage {
         font-size: 1.5rem;
         font-weight: 700;
-        color: #6b7fa3;
+        color: var(--accent);
     }
     
-    /* Log entries */
-    .log-entry {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.85rem;
-        padding: 0.5rem;
-        border-radius: 4px;
-        margin: 0.25rem 0;
-    }
-    
-    .log-info {
-        background: #f8f9fb;
-        color: #5a6578;
-    }
-    
-    .log-success {
-        background: #e8f5e9;
-        color: #2e7d32;
-    }
-    
-    .log-error {
-        background: #ffebee;
-        color: #c62828;
-    }
-    
-    .log-warning {
-        background: #fff8e1;
-        color: #f57c00;
-    }
-    
-    /* Buttons */
-    .stButton > button {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        font-weight: 500;
-        border-radius: 6px;
-        padding: 0.5rem 1.5rem;
-        transition: all 0.2s ease;
-    }
-    
-    /* View list */
+    /* View list items */
     .view-item {
         background: var(--bg-secondary);
         border: 1px solid var(--border-color);
@@ -277,14 +263,145 @@ def apply_custom_css():
     
     .view-name {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: var(--text-primary);
+    }
+    
+    /* Log entries */
+    .log-container {
+        background: var(--primary-dark);
+        border-radius: 6px;
+        padding: 1rem;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .log-entry {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        padding: 0.375rem 0.5rem;
+        border-radius: 3px;
+        margin: 0.25rem 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .log-timestamp {
+        color: var(--text-muted);
+        flex-shrink: 0;
+    }
+    
+    .log-message {
+        color: #e2e8f0;
+    }
+    
+    .log-entry.success .log-message {
+        color: #68d391;
+    }
+    
+    .log-entry.error .log-message {
+        color: #fc8181;
+    }
+    
+    .log-entry.warning .log-message {
+        color: #f6ad55;
+    }
+    
+    /* Section titles */
+    .section-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--border-color);
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        border-radius: 6px;
+        padding: 0.5rem 1.5rem;
+        transition: all 0.15s ease;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+    
+    .stButton > button[kind="primary"] {
+        background: var(--accent);
+        border: none;
+        color: white;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background: var(--primary-dark);
+    }
+    
+    /* Tables */
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+    
+    .data-table th {
+        background: var(--bg-tertiary);
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .data-table td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-primary);
+    }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border-color);
+    }
+    
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 2rem;
     }
     
     /* Hide Streamlit elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display: none;}
+    
+    /* Input styling */
+    .stTextInput > div > div > input {
+        font-family: 'Inter', sans-serif;
+        border-radius: 6px;
+    }
+    
+    .stSelectbox > div > div {
+        border-radius: 6px;
+    }
+    
+    .stDateInput > div > div > input {
+        font-family: 'Inter', sans-serif;
+        border-radius: 6px;
+    }
+    
+    /* Divider */
+    .divider {
+        height: 1px;
+        background: var(--border-color);
+        margin: 1.5rem 0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -304,27 +421,23 @@ def get_domo_base_url():
 
 @st.cache_data(ttl=300)
 def list_dataflows() -> List[Dict]:
-    """Fetch all dataflows from Domo"""
     url = f"{get_domo_base_url()}/api/dataprocessing/v1/dataflows"
     response = requests.get(url, headers=get_domo_headers(), timeout=60)
     response.raise_for_status()
     return response.json()
 
 def get_dataflow(df_id: int) -> Dict:
-    """Get dataflow details"""
     url = f"{get_domo_base_url()}/api/dataprocessing/v1/dataflows/{df_id}"
     response = requests.get(url, headers=get_domo_headers(), timeout=60)
     response.raise_for_status()
     return response.json()
 
 def trigger_dataflow(df_id: int) -> Tuple[int, Dict]:
-    """Trigger a dataflow execution"""
     url = f"{get_domo_base_url()}/api/dataprocessing/v1/dataflows/{df_id}/executions"
     response = requests.post(url, headers=get_domo_headers(), timeout=60)
     return response.status_code, response.json() if response.text else {}
 
 def get_execution_status(df_id: int, execution_id: int) -> Tuple[str, int, str]:
-    """Get status of a specific execution"""
     dataflow = get_dataflow(df_id)
     last_exec = dataflow.get('lastExecution', {})
     last_exec_id = last_exec.get('id')
@@ -336,7 +449,6 @@ def get_execution_status(df_id: int, execution_id: int) -> Tuple[str, int, str]:
         return 'PENDING', last_exec_id, last_exec_status
 
 def extract_input_names(dataflow: Dict) -> List[str]:
-    """Extract input dataset names from dataflow"""
     inputs = []
     for action in dataflow.get('actions', []) or []:
         if action.get('type') == 'LoadFromVault':
@@ -344,7 +456,6 @@ def extract_input_names(dataflow: Dict) -> List[str]:
             if name:
                 inputs.append(name)
     
-    # Dedupe, preserve order
     seen = set()
     out = []
     for x in inputs:
@@ -354,7 +465,6 @@ def extract_input_names(dataflow: Dict) -> List[str]:
     return out
 
 def extract_update_method(dataflow: Dict) -> Dict:
-    """Extract partition/update method info from dataflow"""
     best = None
     best_score = -1
     
@@ -399,7 +509,6 @@ def extract_update_method(dataflow: Dict) -> Dict:
 
 @st.cache_resource
 def get_snowflake_connection():
-    """Create Snowflake connection using key-pair auth"""
     private_key_pem = st.secrets["snowflake"]["private_key"]
     private_key = serialization.load_pem_private_key(
         private_key_pem.encode(),
@@ -424,12 +533,10 @@ def get_snowflake_connection():
     )
 
 def is_fully_qualified(name: str) -> bool:
-    """Check if name is DATABASE.SCHEMA.OBJECT format"""
     pattern = re.compile(r"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+$")
     return bool(pattern.match(name))
 
 def get_object_type(cur, fqn: str) -> Tuple[str, Optional[str]]:
-    """Check if object exists and get its type"""
     db, schema, obj = fqn.split(".")
     cur.execute(f"""
         SELECT TABLE_TYPE, TABLE_NAME
@@ -443,7 +550,6 @@ def get_object_type(cur, fqn: str) -> Tuple[str, Optional[str]]:
     return "NOT_FOUND", None
 
 def get_view_ddl(cur, fqn: str, actual_name: str = None) -> str:
-    """Get view DDL from Snowflake"""
     db, schema, obj = fqn.split(".")
     if actual_name:
         obj = actual_name
@@ -451,7 +557,6 @@ def get_view_ddl(cur, fqn: str, actual_name: str = None) -> str:
     return cur.fetchone()[0]
 
 def check_date_filter_markers(ddl: str) -> Dict[str, bool]:
-    """Check if view has date filter markers"""
     return {
         'has_normal_marker': '--{normal_date_filter}' in ddl,
         'has_temp_marker': '--{temp_date_filter}' in ddl,
@@ -459,7 +564,6 @@ def check_date_filter_markers(ddl: str) -> Dict[str, bool]:
     }
 
 def apply_date_filter(ddl: str, from_date: str, to_date: str) -> str:
-    """Transform view DDL to use temporary date filter"""
     lines = ddl.split('\n')
     new_lines = []
     
@@ -484,106 +588,130 @@ def apply_date_filter(ddl: str, from_date: str, to_date: str) -> str:
 # =============================================================================
 
 def render_header():
-    """Render app header"""
     st.markdown("""
     <div class="app-header">
-        <h1 class="app-title">🔄 Domo Dataflow Backfill Tool</h1>
-        <p class="app-subtitle">Backfill historical data by running dataflows in date-range batches</p>
+        <h1 class="app-title">Dataflow Backfill Manager</h1>
+        <p class="app-subtitle">Execute historical data backfills through automated batch processing</p>
     </div>
     """, unsafe_allow_html=True)
 
 def render_dataflow_info(df_info: Dict, update_info: Dict):
-    """Render dataflow information card"""
     partitioned = update_info.get('partitioned', False)
     partition_cols = update_info.get('partition_columns', [])
     update_method = update_info.get('update_method', 'Unknown')
     
-    st.markdown("##### Dataflow Information")
+    st.markdown('<div class="section-title">Dataflow Configuration</div>', unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-value" style="font-size: 1rem;">{df_info.get('name', 'Unknown')}</div>
-            <div class="stat-label">Dataflow Name</div>
+        <div class="metric-box">
+            <div class="metric-value">{df_info.get('name', 'Unknown')[:30]}</div>
+            <div class="metric-label">Dataflow Name</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
-        status_class = "status-ready" if partitioned else "status-missing"
-        status_text = "Yes" if partitioned else "No"
+        status_class = "status-ready" if partitioned else "status-warning"
+        status_text = "Enabled" if partitioned else "Disabled"
         st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-value"><span class="{status_class}">{status_text}</span></div>
-            <div class="stat-label">Partitioned</div>
+        <div class="metric-box">
+            <div class="metric-value"><span class="status-indicator {status_class}">{status_text}</span></div>
+            <div class="metric-label">Partition Update</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col3:
         st.markdown(f"""
-        <div class="stat-box">
-            <div class="stat-value" style="font-size: 1rem;">{update_method or 'N/A'}</div>
-            <div class="stat-label">Update Method</div>
+        <div class="metric-box">
+            <div class="metric-value">{update_method or 'N/A'}</div>
+            <div class="metric-label">Update Method</div>
         </div>
         """, unsafe_allow_html=True)
     
     if partition_cols:
         st.markdown(f"""
-        <div class="info-box">
-            <strong>Partition Columns:</strong> {', '.join(partition_cols)}
+        <div class="alert alert-info">
+            <span class="alert-title">Partition Configuration</span><br/>
+            Partition columns: <strong>{', '.join(partition_cols)}</strong>
         </div>
         """, unsafe_allow_html=True)
     
     if not partitioned:
         st.markdown("""
-        <div class="warning-box">
-            ⚠️ <strong>Warning:</strong> This dataflow is not partitioned. Each batch may overwrite previous data instead of appending.
+        <div class="alert alert-warning">
+            <span class="alert-title">Warning</span><br/>
+            This dataflow does not use partition updates. Each batch execution may overwrite previous data.
         </div>
         """, unsafe_allow_html=True)
 
 def render_view_status(ready_views: List, missing_views: List, skipped: List):
-    """Render view status section"""
-    st.markdown("##### Input Views Status")
+    st.markdown('<div class="section-title">Input Sources Analysis</div>', unsafe_allow_html=True)
+    
+    # Summary metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-value">{len(ready_views)}</div>
+            <div class="metric-label">Ready</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-value">{len(missing_views)}</div>
+            <div class="metric-label">Missing Markers</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-value">{len(skipped)}</div>
+            <div class="metric-label">Skipped</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br/>", unsafe_allow_html=True)
     
     if ready_views:
-        st.markdown(f"**✅ Ready for backfill ({len(ready_views)})**")
-        for fqn, _ in ready_views:
-            st.markdown(f"""
-            <div class="view-item">
-                <span class="view-name">{fqn}</span>
-                <span class="status-ready">Ready</span>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.expander(f"Ready for backfill ({len(ready_views)})", expanded=True):
+            for fqn, _ in ready_views:
+                st.markdown(f"""
+                <div class="view-item">
+                    <span class="view-name">{fqn}</span>
+                    <span class="status-indicator status-ready">Ready</span>
+                </div>
+                """, unsafe_allow_html=True)
     
     if missing_views:
-        st.markdown(f"**⚠️ Missing markers ({len(missing_views)})**")
-        for fqn, markers in missing_views:
-            st.markdown(f"""
-            <div class="view-item">
-                <span class="view-name">{fqn}</span>
-                <span class="status-missing">Missing Markers</span>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.expander(f"Missing date filter markers ({len(missing_views)})"):
+            for fqn, markers in missing_views:
+                st.markdown(f"""
+                <div class="view-item">
+                    <span class="view-name">{fqn}</span>
+                    <span class="status-indicator status-warning">Missing Markers</span>
+                </div>
+                """, unsafe_allow_html=True)
     
     if skipped:
-        with st.expander(f"⏭️ Skipped - not views ({len(skipped)})"):
+        with st.expander(f"Skipped sources ({len(skipped)})"):
             for fqn, obj_type in skipped:
                 st.markdown(f"""
                 <div class="view-item">
                     <span class="view-name">{fqn}</span>
-                    <span class="status-skipped">{obj_type}</span>
+                    <span class="status-indicator status-neutral">{obj_type}</span>
                 </div>
                 """, unsafe_allow_html=True)
 
-def render_progress(current_batch: int, total_batches: int, current_dates: Tuple[str, str], status: str, logs: List[str]):
-    """Render progress section"""
+def render_progress(current_batch: int, total_batches: int, current_dates: Tuple[str, str], status: str, logs: List[Dict]):
     percentage = (current_batch / total_batches * 100) if total_batches > 0 else 0
     
     st.markdown(f"""
     <div class="progress-container">
         <div class="progress-header">
-            <span class="progress-title">Backfill Progress</span>
+            <span class="progress-title">Execution Progress</span>
             <span class="progress-percentage">{percentage:.0f}%</span>
         </div>
     </div>
@@ -593,24 +721,43 @@ def render_progress(current_batch: int, total_batches: int, current_dates: Tuple
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Current Batch", f"{current_batch} / {total_batches}")
+        st.metric("Batch", f"{current_batch} / {total_batches}")
     with col2:
-        st.metric("Date Range", f"{current_dates[0]} → {current_dates[1]}" if current_dates[0] else "—")
+        date_display = f"{current_dates[0]} to {current_dates[1]}" if current_dates[0] else "—"
+        st.metric("Current Range", date_display)
     with col3:
         status_class = {
             'RUNNING': 'status-running',
             'SUCCESS': 'status-success',
             'FAILED': 'status-failed',
-            'PENDING': 'status-running'
-        }.get(status, 'status-running')
-        st.markdown(f'<span class="{status_class}">{status}</span>', unsafe_allow_html=True)
+            'PENDING': 'status-info',
+            'PREPARING': 'status-info'
+        }.get(status, 'status-info')
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-value"><span class="status-indicator {status_class}">{status}</span></div>
+            <div class="metric-label">Status</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Logs
+    # Log display
     if logs:
-        with st.expander("Execution Log", expanded=True):
-            for log in logs[-20:]:  # Show last 20 logs
-                log_class = "log-success" if "✅" in log else "log-error" if "❌" in log else "log-info"
-                st.markdown(f'<div class="log-entry {log_class}">{log}</div>', unsafe_allow_html=True)
+        st.markdown("<br/>", unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Execution Log</div>', unsafe_allow_html=True)
+        
+        log_html = '<div class="log-container">'
+        for log in logs[-25:]:
+            log_class = log.get('type', 'info')
+            timestamp = log.get('timestamp', '')
+            message = log.get('message', '')
+            log_html += f'''
+            <div class="log-entry {log_class}">
+                <span class="log-timestamp">{timestamp}</span>
+                <span class="log-message">{message}</span>
+            </div>
+            '''
+        log_html += '</div>'
+        st.markdown(log_html, unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -618,7 +765,6 @@ def render_progress(current_batch: int, total_batches: int, current_dates: Tuple
 # =============================================================================
 
 def calculate_batches(start_date: datetime, end_date: datetime, batch_days: int) -> List[Tuple[datetime, datetime]]:
-    """Generate list of (batch_start, batch_end) tuples"""
     batches = []
     current = start_date
     while current <= end_date:
@@ -627,9 +773,15 @@ def calculate_batches(start_date: datetime, end_date: datetime, batch_days: int)
         current = batch_end + timedelta(days=1)
     return batches
 
+def add_log(logs: List[Dict], message: str, log_type: str = 'info'):
+    logs.append({
+        'timestamp': datetime.now().strftime('%H:%M:%S'),
+        'message': message,
+        'type': log_type
+    })
+
 def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: datetime, 
-                 batch_days: int, poll_interval: int, progress_placeholder, log_placeholder):
-    """Run the backfill process"""
+                 batch_days: int, poll_interval: int, progress_placeholder):
     
     batches = calculate_batches(start_date, end_date, batch_days)
     total_batches = len(batches)
@@ -648,28 +800,27 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
             start_str = batch_start.strftime('%Y-%m-%d')
             end_str = batch_end.strftime('%Y-%m-%d')
             
-            logs.append(f"📅 Starting batch {batch_idx + 1}/{total_batches}: {start_str} → {end_str}")
+            add_log(logs, f"Starting batch {batch_idx + 1}/{total_batches}: {start_str} to {end_str}", 'info')
             
-            # Update progress
             with progress_placeholder.container():
                 render_progress(batch_idx, total_batches, (start_str, end_str), "PREPARING", logs)
             
-            # Apply date filters to views
-            logs.append(f"🔧 Modifying {len(ready_views)} views...")
+            # Apply date filters
+            add_log(logs, f"Applying date filters to {len(ready_views)} view(s)", 'info')
             for fqn, actual_name in ready_views:
                 modified_ddl = apply_date_filter(original_ddls[fqn], start_str, end_str)
                 cur.execute(modified_ddl)
             
             # Trigger dataflow
-            logs.append(f"🚀 Triggering dataflow...")
+            add_log(logs, "Triggering dataflow execution", 'info')
             status_code, response = trigger_dataflow(df_id)
             
             if status_code != 200:
-                logs.append(f"❌ Failed to trigger dataflow: {response}")
+                add_log(logs, f"Failed to trigger dataflow: {response}", 'error')
                 raise Exception(f"Trigger failed: {response}")
             
             execution_id = response.get('id')
-            logs.append(f"✅ Triggered execution ID: {execution_id}")
+            add_log(logs, f"Execution started (ID: {execution_id})", 'success')
             
             # Wait for completion
             while True:
@@ -679,20 +830,19 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
                     render_progress(batch_idx, total_batches, (start_str, end_str), status, logs)
                 
                 if status == 'SUCCESS':
-                    logs.append(f"✅ Batch {batch_idx + 1} completed successfully")
+                    add_log(logs, f"Batch {batch_idx + 1} completed successfully", 'success')
                     break
                 elif status in ['FAILED', 'KILLED', 'CANCELLED']:
-                    logs.append(f"❌ Batch {batch_idx + 1} failed with status: {status}")
-                    raise Exception(f"Dataflow failed: {status}")
+                    add_log(logs, f"Batch {batch_idx + 1} failed: {status}", 'error')
+                    raise Exception(f"Dataflow execution failed: {status}")
                 
                 time.sleep(poll_interval)
             
-            # Check if stop requested
             if st.session_state.get('stop_backfill', False):
-                logs.append("⏹️ Backfill stopped by user")
+                add_log(logs, "Backfill stopped by user", 'warning')
                 break
         
-        logs.append("🎉 Backfill completed successfully!")
+        add_log(logs, "Backfill completed successfully", 'success')
         
         with progress_placeholder.container():
             render_progress(total_batches, total_batches, ("", ""), "SUCCESS", logs)
@@ -700,20 +850,19 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
         return True, logs
         
     except Exception as e:
-        logs.append(f"❌ Error: {str(e)}")
+        add_log(logs, f"Error: {str(e)}", 'error')
         with progress_placeholder.container():
             render_progress(batch_idx if 'batch_idx' in locals() else 0, total_batches, ("", ""), "FAILED", logs)
         return False, logs
         
     finally:
-        # Always revert views
-        logs.append("🔄 Reverting views to original state...")
+        add_log(logs, "Reverting views to original state", 'info')
         for fqn in original_ddls:
             try:
                 cur.execute(original_ddls[fqn])
             except Exception as e:
-                logs.append(f"⚠️ Failed to revert {fqn}: {e}")
-        logs.append("✅ Views reverted")
+                add_log(logs, f"Failed to revert {fqn}: {e}", 'warning')
+        add_log(logs, "View reversion complete", 'success')
         cur.close()
 
 
@@ -724,7 +873,7 @@ def run_backfill(df_id: int, ready_views: List, start_date: datetime, end_date: 
 def main():
     st.set_page_config(
         page_title=APP_NAME,
-        page_icon="🔄",
+        page_icon="◇",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -739,10 +888,10 @@ def main():
         st.session_state.stop_backfill = False
     
     # ==========================================================================
-    # SIDEBAR - Configuration
+    # SIDEBAR
     # ==========================================================================
     with st.sidebar:
-        st.markdown("### ⚙️ Configuration")
+        st.markdown("### Configuration")
         
         # Load dataflows
         try:
@@ -752,34 +901,36 @@ def main():
             st.error(f"Failed to load dataflows: {e}")
             return
         
-        # Search and select dataflow
-        search_term = st.text_input("🔍 Search dataflows", "")
+        # Dataflow selection
+        st.markdown("**Select Dataflow**")
+        search_term = st.text_input("Search", "", placeholder="Filter by name or ID")
         filtered_options = [opt for opt in dataflow_options.keys() if search_term.lower() in opt.lower()]
         
         if filtered_options:
-            selected = st.selectbox("Select dataflow", filtered_options)
+            selected = st.selectbox("Dataflow", filtered_options, label_visibility="collapsed")
             selected_df_id = dataflow_options[selected]
         else:
-            st.warning("No dataflows match your search")
+            st.warning("No matching dataflows found")
             return
         
-        st.markdown("---")
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Date range
-        st.markdown("### 📅 Date Range")
+        st.markdown("**Date Range**")
         col1, col2 = st.columns(2)
         with col1:
-            start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=30))
+            start_date = st.date_input("Start", value=datetime.now() - timedelta(days=30))
         with col2:
-            end_date = st.date_input("End Date", value=datetime.now() - timedelta(days=1))
+            end_date = st.date_input("End", value=datetime.now() - timedelta(days=1))
         
-        # Batch size
-        batch_days = st.number_input("Batch Size (days)", min_value=1, max_value=30, value=3)
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        # Poll interval
-        poll_interval = st.number_input("Poll Interval (seconds)", min_value=5, max_value=120, value=10)
+        # Batch settings
+        st.markdown("**Batch Settings**")
+        batch_days = st.number_input("Batch size (days)", min_value=1, max_value=30, value=3)
+        poll_interval = st.number_input("Poll interval (seconds)", min_value=5, max_value=120, value=10)
         
-        # Calculate batches
+        # Batch calculation
         batches = calculate_batches(
             datetime.combine(start_date, datetime.min.time()),
             datetime.combine(end_date, datetime.min.time()),
@@ -787,8 +938,9 @@ def main():
         )
         
         st.markdown(f"""
-        <div class="info-box">
-            📊 This will run <strong>{len(batches)} batches</strong>
+        <div class="alert alert-info">
+            <span class="alert-title">Execution Plan</span><br/>
+            Total batches: <strong>{len(batches)}</strong>
         </div>
         """, unsafe_allow_html=True)
     
@@ -796,7 +948,6 @@ def main():
     # MAIN CONTENT
     # ==========================================================================
     
-    # Get dataflow info
     try:
         dataflow = get_dataflow(selected_df_id)
         update_info = extract_update_method(dataflow)
@@ -805,19 +956,22 @@ def main():
         st.error(f"Failed to load dataflow details: {e}")
         return
     
-    # Render dataflow info
     render_dataflow_info({'name': dataflow.get('name')}, update_info)
     
-    st.markdown("---")
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
     # Analyze views
     snowflake_objects = [name for name in input_names if is_fully_qualified(name)]
     
     if not snowflake_objects:
-        st.warning("No Snowflake views found in this dataflow's inputs.")
+        st.markdown("""
+        <div class="alert alert-warning">
+            <span class="alert-title">No Snowflake Views Found</span><br/>
+            This dataflow does not contain any Snowflake view inputs.
+        </div>
+        """, unsafe_allow_html=True)
         return
     
-    # Check view status
     conn = get_snowflake_connection()
     cur = conn.cursor()
     
@@ -844,32 +998,38 @@ def main():
     
     cur.close()
     
-    # Render view status
     render_view_status(ready_views, missing_views, skipped)
     
-    st.markdown("---")
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
     # ==========================================================================
-    # BACKFILL CONTROLS
+    # EXECUTION CONTROLS
     # ==========================================================================
     
     if not ready_views:
-        st.error("❌ No views are ready for backfill. Please add the required date filter markers to your views.")
         st.markdown("""
-        **Required markers in your Snowflake view:**
-```sql
-        where date >= '2025-01-01' --{normal_date_filter}
-        --WHERE date BETWEEN '{from_date}' AND '{to_date}' --{temp_date_filter}
-```
-        """)
+        <div class="alert alert-error">
+            <span class="alert-title">Cannot Proceed</span><br/>
+            No views are configured for backfill. Add the required date filter markers to your Snowflake views.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.expander("View marker configuration instructions"):
+            st.code("""
+-- Add these markers to your Snowflake view WHERE clause:
+
+WHERE date >= '2025-01-01' --{normal_date_filter}
+--WHERE date BETWEEN '{from_date}' AND '{to_date}' --{temp_date_filter}
+            """, language="sql")
         return
     
-    # Start/Stop buttons
-    col1, col2, col3 = st.columns([2, 2, 4])
+    st.markdown('<div class="section-title">Execution Controls</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([2, 2, 6])
     
     with col1:
         start_btn = st.button(
-            "▶️ Start Backfill", 
+            "Start Backfill", 
             type="primary", 
             use_container_width=True,
             disabled=st.session_state.backfill_running
@@ -877,7 +1037,7 @@ def main():
     
     with col2:
         stop_btn = st.button(
-            "⏹️ Stop", 
+            "Stop", 
             use_container_width=True,
             disabled=not st.session_state.backfill_running
         )
@@ -885,11 +1045,8 @@ def main():
     if stop_btn:
         st.session_state.stop_backfill = True
     
-    # Progress placeholder
     progress_placeholder = st.empty()
-    log_placeholder = st.empty()
     
-    # Run backfill
     if start_btn and not st.session_state.backfill_running:
         st.session_state.backfill_running = True
         st.session_state.stop_backfill = False
@@ -901,17 +1058,25 @@ def main():
             end_date=datetime.combine(end_date, datetime.min.time()),
             batch_days=batch_days,
             poll_interval=poll_interval,
-            progress_placeholder=progress_placeholder,
-            log_placeholder=log_placeholder
+            progress_placeholder=progress_placeholder
         )
         
         st.session_state.backfill_running = False
         
         if success:
-            st.balloons()
-            st.success("🎉 Backfill completed successfully!")
+            st.markdown("""
+            <div class="alert alert-success">
+                <span class="alert-title">Backfill Complete</span><br/>
+                All batches have been processed successfully.
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.error("❌ Backfill failed. Check the logs for details.")
+            st.markdown("""
+            <div class="alert alert-error">
+                <span class="alert-title">Backfill Failed</span><br/>
+                An error occurred during execution. Review the log for details.
+            </div>
+            """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
