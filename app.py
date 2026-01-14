@@ -17,7 +17,7 @@ from streamlit_autorefresh import st_autorefresh
 
 APP_NAME = "Dataflow Backfill Manager"
 BACKFILL_TABLE = "MAKO_DATA_LAKE.PUBLIC.BACKFILL_RUNS"
-AUTO_REFRESH_SECONDS = 5
+AUTO_REFRESH_SECONDS = 15
 
 # =============================================================================
 # STYLING
