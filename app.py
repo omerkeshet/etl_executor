@@ -1252,4 +1252,158 @@ def main():
             batch_days = st.number_input("Batch size (days)", min_value=1, max_value=30, value=3, key="batch_days")
             poll_interval = st.number_input("Poll interval (seconds)", min_value=5, max_value=120, value=10, key="poll_interval")
             
-            total_ba
+            total_batches = calculate_total_batches(
+                datetime.combine(start_date, datetime.min.time()),
+                datetime.combine(end_date, datetime.min.time()),
+                batch_days
+            )
+            
+            st.markdown(f"""
+            <div class="alert alert-info">
+                <span class="alert-title">Execution Plan</span><br/>
+                Total batches: <strong>{total_batches}</strong>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_preview:
+            st.markdown('<div class="section-title">Dataflow Preview</div>', unsafe_allow_html=True)
+            
+            try:
+                dataflow = get_dataflow(selected_df_id)
+                update_info = extract_update_method(dataflow)
+                input_names = extract_input_names(dataflow)
+            except Exception as e:
+                st.error(f"Failed to load dataflow details: {e}")
+                return
+            
+            render_dataflow_info({'name': dataflow.get('name')}, update_info)
+            
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+            
+            snowflake_objects = [name for name in input_names if is_fully_qualified(name)]
+            
+            if not snowflake_objects:
+                st.markdown("""
+                <div class="alert alert-warning">
+                    <span class="alert-title">No Snowflake Views Found</span><br/>
+                    This dataflow does not contain any Snowflake view inputs.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                ready_views = []
+                missing_views = []
+                skipped = []
+                
+                for fqn in snowflake_objects:
+                    try:
+                        obj_type, actual_name = get_object_type(cur, fqn)
+                        
+                        if obj_type == "VIEW":
+                            ddl = get_view_ddl(cur, fqn, actual_name)
+                            markers = check_date_filter_markers(ddl)
+                            
+                            if markers['ready_for_backfill']:
+                                ready_views.append((fqn, actual_name))
+                            else:
+                                missing_views.append((fqn, markers))
+                        else:
+                            skipped.append((fqn, obj_type))
+                    except Exception as e:
+                        skipped.append((fqn, f"Error: {e}"))
+                
+                st.markdown('<div class="section-title">Input Sources</div>', unsafe_allow_html=True)
+                render_view_status(ready_views, missing_views, skipped)
+                
+                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+                
+                # Check for conflicts with active runs
+                conflicting_views = []
+                for run in active_runs:
+                    run_views = parse_json_field(run['ready_views']) or []
+                    run_view_fqns = [v['fqn'] for v in run_views]
+                    for fqn, _ in ready_views:
+                        if fqn in run_view_fqns:
+                            conflicting_views.append((fqn, run['run_id'], run['dataflow_name']))
+                
+                if conflicting_views:
+                    st.markdown("""
+                    <div class="alert alert-error">
+                        <span class="alert-title">View Conflict Detected</span><br/>
+                        The following views are already being used by active backfills:
+                    </div>
+                    """, unsafe_allow_html=True)
+                    for fqn, run_id, df_name in conflicting_views:
+                        st.markdown(f"- `{fqn}` (Run {run_id}: {df_name})")
+                    
+                    st.warning("Cannot start backfill while views are in use by another run.")
+                
+                elif not ready_views:
+                    st.markdown("""
+                    <div class="alert alert-error">
+                        <span class="alert-title">Cannot Proceed</span><br/>
+                        No views are configured for backfill. Add the required date filter markers.
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander("View marker configuration instructions"):
+                        st.code("""
+-- Add these markers to your Snowflake view WHERE clause:
+
+WHERE date >= '2025-01-01' --{normal_date_filter}
+--WHERE date BETWEEN '{from_date}' AND '{to_date}' --{temp_date_filter}
+                        """, language="sql")
+                
+                else:
+                    st.markdown('<div class="section-title">Start Backfill</div>', unsafe_allow_html=True)
+                    
+                    if st.button("Start Backfill", type="primary", use_container_width=True):
+                        st.session_state.processing = True
+                        
+                        try:
+                            original_ddls = {}
+                            for fqn, actual_name in ready_views:
+                                original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
+                            
+                            ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
+                            
+                            run_id = create_backfill_run(
+                                cur=cur,
+                                dataflow_id=selected_df_id,
+                                dataflow_name=dataflow.get('name'),
+                                start_date=datetime.combine(start_date, datetime.min.time()),
+                                end_date=datetime.combine(end_date, datetime.min.time()),
+                                batch_days=batch_days,
+                                total_batches=total_batches,
+                                original_ddls=original_ddls,
+                                ready_views=ready_views_data,
+                                poll_interval=poll_interval
+                            )
+                            conn.commit()
+                            
+                            st.session_state.processing = False
+                            st.success(f"Backfill started with Run ID: {run_id}")
+                            time.sleep(1)
+                            st.rerun()
+                        
+                        except Exception as e:
+                            st.session_state.processing = False
+                            st.error(f"Failed to start backfill: {e}")
+    
+    # ==========================================================================
+    # AUTO-REFRESH
+    # ==========================================================================
+    
+    if active_runs and not st.session_state.get('processing', False):
+        waiting_runs = [r for r in active_runs if r['status'] == 'WAITING']
+        
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("Refresh", use_container_width=True):
+                st.rerun()
+        
+        if waiting_runs:
+            st_autorefresh(interval=AUTO_REFRESH_SECONDS * 1000, key="datarefresh")
+
+
+if __name__ == "__main__":
+    main()
