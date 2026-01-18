@@ -1225,6 +1225,10 @@ def main():
             except Exception as e:
                 st.error(f"Failed to load dataflows: {e}")
                 return
+            # Add refresh button for dataflows
+            if st.button("🔄 Refresh Dataflows", key="refresh_dataflows"):
+                list_dataflows.clear()  # Clear the cache
+                st.rerun()
             
             st.markdown("**Select Dataflow**")
             search_term = st.text_input("Search", "", placeholder="Filter by name or ID", key="df_search")
