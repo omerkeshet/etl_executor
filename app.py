@@ -1397,39 +1397,35 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
                         </div>
                         """, unsafe_allow_html=True)
                     elif st.button("Start Backfill", type="primary", use_container_width=True):
-                    
-                        if st.button("Start Backfill", type="primary", use_container_width=True):
-                            st.session_state.processing = True
+                        try:
+                            original_ddls = {}
+                            for fqn, actual_name in ready_views:
+                                original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
                             
-                            try:
-                                original_ddls = {}
-                                for fqn, actual_name in ready_views:
-                                    original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
-                                
-                                ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
-                                
-                                run_id = create_backfill_run(
-                                    cur=cur,
-                                    dataflow_id=selected_df_id,
-                                    dataflow_name=dataflow.get('name'),
-                                    start_date=datetime.combine(start_date, datetime.min.time()),
-                                    end_date=datetime.combine(end_date, datetime.min.time()),
-                                    batch_days=batch_days,
-                                    total_batches=total_batches,
-                                    original_ddls=original_ddls,
-                                    ready_views=ready_views_data,
-                                    poll_interval=poll_interval
-                                )
-                                conn.commit()
-                                
-                                st.session_state.processing = False
-                                st.success(f"Backfill started with Run ID: {run_id}")
-                                time.sleep(1)
-                                st.rerun()
+                            ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
                             
-                            except Exception as e:
-                                st.session_state.processing = False
-                                st.error(f"Failed to start backfill: {e}")
+                            run_id = create_backfill_run(
+                                cur=cur,
+                                dataflow_id=selected_df_id,
+                                dataflow_name=dataflow.get('name'),
+                                start_date=datetime.combine(start_date, datetime.min.time()),
+                                end_date=datetime.combine(end_date, datetime.min.time()),
+                                batch_days=batch_days,
+                                total_batches=total_batches,
+                                original_ddls=original_ddls,
+                                ready_views=ready_views_data,
+                                poll_interval=poll_interval
+                            )
+                            conn.commit()
+                            
+                            st.session_state.processing = False
+                            st.success(f"Backfill started with Run ID: {run_id}")
+                            time.sleep(1)
+                            st.rerun()
+                        
+                        except Exception as e:
+                            st.session_state.processing = False
+                            st.error(f"Failed to start backfill: {e}")
     
     # ==========================================================================
     # AUTO-REFRESH
