@@ -469,7 +469,18 @@ def get_dataflow(df_id: int) -> Dict:
 def trigger_dataflow(df_id: int) -> Tuple[int, Dict]:
     url = f"{get_domo_base_url()}/api/dataprocessing/v1/dataflows/{df_id}/executions"
     response = requests.post(url, headers=get_domo_headers(), timeout=60)
+    
+    # Better error handling
+    if response.status_code != 200:
+        error_info = {
+            'status_code': response.status_code,
+            'reason': response.reason,
+            'body': response.text[:500] if response.text else 'empty response'
+        }
+        return response.status_code, error_info
+    
     return response.status_code, response.json() if response.text else {}
+
 
 def get_execution_status(df_id: int, execution_id: int) -> str:
     dataflow = get_dataflow(df_id)
@@ -481,6 +492,24 @@ def get_execution_status(df_id: int, execution_id: int) -> str:
         return last_exec_status
     else:
         return 'PENDING'
+
+def get_execution_status(df_id: int, execution_id: int) -> str:
+    dataflow = get_dataflow(df_id)
+    last_exec = dataflow.get('lastExecution', {})
+    last_exec_id = last_exec.get('id')
+    last_exec_status = last_exec.get('state', 'UNKNOWN')
+    
+    if last_exec_id == execution_id:
+        return last_exec_status
+    else:
+        return 'PENDING'
+
+def is_dataflow_running(df_id: int) -> bool:
+    """Check if a dataflow is currently executing"""
+    dataflow = get_dataflow(df_id)
+    last_exec = dataflow.get('lastExecution', {})
+    state = last_exec.get('state', '')
+    return state in ('QUEUED', 'RUNNING', 'TRIGGERED')
 
 def extract_input_names(dataflow: Dict) -> List[str]:
     inputs = []
@@ -1359,39 +1388,48 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
                 
                 else:
                     st.markdown('<div class="section-title">Start Backfill</div>', unsafe_allow_html=True)
+                        # Add this check before the button
+                    if is_dataflow_running(selected_df_id):
+                        st.markdown("""
+                        <div class="alert alert-warning">
+                            <span class="alert-title">Dataflow Currently Running</span><br/>
+                            This dataflow is already executing. Wait for it to complete before starting a backfill.
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif st.button("Start Backfill", type="primary", use_container_width=True):
                     
-                    if st.button("Start Backfill", type="primary", use_container_width=True):
-                        st.session_state.processing = True
-                        
-                        try:
-                            original_ddls = {}
-                            for fqn, actual_name in ready_views:
-                                original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
+                        if st.button("Start Backfill", type="primary", use_container_width=True):
+                            st.session_state.processing = True
                             
-                            ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
+                            try:
+                                original_ddls = {}
+                                for fqn, actual_name in ready_views:
+                                    original_ddls[fqn] = get_view_ddl(cur, fqn, actual_name)
+                                
+                                ready_views_data = [{'fqn': fqn, 'actual_name': actual_name} for fqn, actual_name in ready_views]
+                                
+                                run_id = create_backfill_run(
+                                    cur=cur,
+                                    dataflow_id=selected_df_id,
+                                    dataflow_name=dataflow.get('name'),
+                                    start_date=datetime.combine(start_date, datetime.min.time()),
+                                    end_date=datetime.combine(end_date, datetime.min.time()),
+                                    batch_days=batch_days,
+                                    total_batches=total_batches,
+                                    original_ddls=original_ddls,
+                                    ready_views=ready_views_data,
+                                    poll_interval=poll_interval
+                                )
+                                conn.commit()
+                                
+                                st.session_state.processing = False
+                                st.success(f"Backfill started with Run ID: {run_id}")
+                                time.sleep(1)
+                                st.rerun()
                             
-                            run_id = create_backfill_run(
-                                cur=cur,
-                                dataflow_id=selected_df_id,
-                                dataflow_name=dataflow.get('name'),
-                                start_date=datetime.combine(start_date, datetime.min.time()),
-                                end_date=datetime.combine(end_date, datetime.min.time()),
-                                batch_days=batch_days,
-                                total_batches=total_batches,
-                                original_ddls=original_ddls,
-                                ready_views=ready_views_data,
-                                poll_interval=poll_interval
-                            )
-                            conn.commit()
-                            
-                            st.session_state.processing = False
-                            st.success(f"Backfill started with Run ID: {run_id}")
-                            time.sleep(1)
-                            st.rerun()
-                        
-                        except Exception as e:
-                            st.session_state.processing = False
-                            st.error(f"Failed to start backfill: {e}")
+                            except Exception as e:
+                                st.session_state.processing = False
+                                st.error(f"Failed to start backfill: {e}")
     
     # ==========================================================================
     # AUTO-REFRESH
