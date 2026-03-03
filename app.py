@@ -1475,4 +1475,5 @@ WHERE date >= '2025-01-01' --{normal_date_filter}
 
 
 if __name__ == "__main__":
-    main()
+    if check_password():
+        main()
